@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RVO Health &mdash; Kit Inventory &amp; Fulfillment Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
+<style>
+:root {
+  --bg-primary:#f5f6f8; --bg-card:#ffffff; --bg-header:#12203c;
+  --text-primary:#1c2536; --text-secondary:#6b7280; --text-on-dark:#ffffff;
+  --color-1:#3b6fd6; --color-2:#e08a3c; --color-3:#3fa373; --color-4:#c4504e;
+  --color-5:#8172b3; --color-6:#4aa0c9;
+  --positive:#1f9d55; --negative:#d64545; --gap:16px; --radius:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-primary);color:var(--text-primary);line-height:1.5;}
+.dashboard-container{max-width:1440px;margin:0 auto;padding:var(--gap);}
+.dashboard-header{background:var(--bg-header);color:var(--text-on-dark);padding:22px 26px;border-radius:var(--radius);margin-bottom:var(--gap);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.dashboard-header h1{font-size:21px;font-weight:600;}
+.dashboard-header p{font-size:13px;color:rgba(255,255,255,.65);margin-top:4px;}
+.tabs{display:flex;gap:8px;}
+.tab-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:var(--text-on-dark);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;}
+.tab-btn.active{background:var(--color-1);border-color:var(--color-1);}
+.alert-banner{border-radius:var(--radius);padding:16px 22px;margin-bottom:var(--gap);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.alert-banner.bad{background:#fdeceb;border:1px solid #f3b9b6;}
+.alert-banner.good{background:#e9f7ef;border:1px solid #b9e6c9;}
+.alert-banner .alert-text{font-size:14px;font-weight:600;color:var(--text-primary);}
+.alert-banner.bad .alert-text{color:#8a1f1f;}
+.alert-banner.good .alert-text{color:#1a6b3c;}
+.alert-banner .alert-sub{font-size:12px;color:var(--text-secondary);margin-top:2px;font-weight:400;}
+.alert-cta{background:var(--negative);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--gap);margin-bottom:var(--gap);}
+.kpi-card{background:var(--bg-card);border-radius:var(--radius);padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid var(--color-1);}
+.kpi-card.warn{border-left-color:var(--color-2);}
+.kpi-card.bad{border-left-color:var(--color-4);}
+.kpi-card.good{border-left-color:var(--color-3);}
+.kpi-label{font-size:12px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.kpi-value{font-size:26px;font-weight:700;}
+.kpi-sub{font-size:12px;color:var(--text-secondary);margin-top:4px;}
+.chart-row{display:grid;grid-template-columns:2fr 1fr;gap:var(--gap);margin-bottom:var(--gap);}
+.chart-row.equal{grid-template-columns:1fr 1fr;}
+.chart-container{background:var(--bg-card);border-radius:var(--radius);padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.chart-container h3{font-size:14px;font-weight:600;margin-bottom:14px;}
+.chart-container .note{font-size:12px;color:var(--text-secondary);margin-top:8px;}
+.chart-container canvas{max-height:320px;}
+.table-section{background:var(--bg-card);border-radius:var(--radius);padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow-x:auto;margin-bottom:var(--gap);}
+.table-section h3{font-size:14px;font-weight:600;margin-bottom:14px;}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table thead th{text-align:left;padding:9px 12px;border-bottom:2px solid #e2e5ea;color:var(--text-secondary);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;cursor:pointer;user-select:none;}
+.data-table thead th:hover{color:var(--text-primary);background:#f8f9fa;}
+.data-table tbody td{padding:9px 12px;border-bottom:1px solid #f0f0f0;white-space:nowrap;}
+.data-table tbody tr:hover{background:#f8f9fa;}
+.data-table tbody tr.stuck{background:#fdeceb;}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.badge.zero{background:#fdeaea;color:var(--negative);}
+.badge.ok{background:#e6f6ec;color:var(--positive);}
+.badge.stuck{background:var(--negative);color:#fff;}
+.pane{display:none;}
+.pane.active{display:block;}
+.dashboard-footer{text-align:center;font-size:12px;color:var(--text-secondary);padding:14px 0 4px;}
+@media (max-width:900px){.chart-row,.chart-row.equal{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="dashboard-container">
+  <header class="dashboard-header">
+    <div>
+      <h1>Kit Inventory &amp; Fulfillment Dashboard</h1>
+      <p id="asof-line"></p>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-pane="overview">Overview</button>
+      <button class="tab-btn" data-pane="inventory">Inventory</button>
+      <button class="tab-btn" data-pane="shipments">Shipments</button>
+      <button class="tab-btn" data-pane="returns">Returns</button>
+    </div>
+  </header>
+
+  <div id="stuck-alert"></div>
+
+  <section class="kpi-row" id="kpi-row"></section>
+
+  <!-- OVERVIEW -->
+  <div class="pane active" id="pane-overview">
+    <section class="chart-row">
+      <div class="chart-container"><h3>Orders Triggered: SFHC &rarr; Staci (Daily, Month to Date)</h3><canvas id="chart-orders-triggered"></canvas>
+        <p class="note" id="orders-triggered-note"></p>
+      </div>
+      <div class="chart-container"><h3>Triggered vs. Shipped (Last 7 Days)</h3><canvas id="chart-triggered-vs-shipped"></canvas>
+        <p class="note">Compares daily order volume entering the pipeline (SFHC &rarr; Staci) against units actually shipped, to spot a growing backlog early.</p>
+      </div>
+    </section>
+    <section class="chart-row">
+      <div class="chart-container"><h3>Daily Units Shipped (Jun 1 &ndash; Aug 7, 2026)</h3><canvas id="chart-ship-daily"></canvas></div>
+      <div class="chart-container"><h3>Current On-Hand by SKU (top 10)</h3><canvas id="chart-inv-top"></canvas></div>
+    </section>
+    <section class="chart-row equal">
+      <div class="chart-container"><h3>Units Shipped by SKU</h3><canvas id="chart-ship-sku"></canvas></div>
+      <div class="chart-container"><h3>Returns by Reason</h3><canvas id="chart-returns-reason"></canvas>
+        <p class="note">Sample is thin (2 records as of the latest Returns Report) &mdash; will fill out as more daily reports arrive.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- INVENTORY -->
+  <div class="pane" id="pane-inventory">
+    <section class="chart-row equal">
+      <div class="chart-container"><h3>On-Hand Trend &mdash; Tracked Kit SKUs (Aug 5 vs Aug 7, 2026)</h3><canvas id="chart-inv-trend"></canvas></div>
+      <div class="chart-container"><h3>Available vs Backorder vs On Hold</h3><canvas id="chart-inv-status"></canvas></div>
+    </section>
+    <section class="table-section">
+      <h3>Current Inventory by SKU &mdash; as of <span class="asof-inv"></span></h3>
+      <table class="data-table" id="table-inventory"></table>
+    </section>
+  </div>
+
+  <!-- SHIPMENTS -->
+  <div class="pane" id="pane-shipments">
+    <section class="chart-row">
+      <div class="chart-container"><h3>Daily Units Shipped &amp; Line Count</h3><canvas id="chart-ship-daily-2"></canvas></div>
+      <div class="chart-container"><h3>Open Order Backlog</h3><canvas id="chart-backlog"></canvas>
+        <p class="note" id="backlog-note"></p>
+      </div>
+    </section>
+    <section class="table-section">
+      <h3>Committed / Open Order Lines &mdash; <span id="stuck-table-title"></span></h3>
+      <p class="note" style="margin-bottom:10px;">Rows highlighted red have sat in <strong>Committed / Label Created</strong> status for 2+ business days and likely need a reorder &mdash; they should have dropped off this report by now.</p>
+      <table class="data-table" id="table-open-orders"></table>
+    </section>
+    <section class="table-section">
+      <h3>Daily Shipment Log</h3>
+      <table class="data-table" id="table-shipments"></table>
+    </section>
+  </div>
+
+  <!-- RETURNS -->
+  <div class="pane" id="pane-returns">
+    <section class="chart-row equal">
+      <div class="chart-container"><h3>Returns by Reason</h3><canvas id="chart-returns-reason-2"></canvas></div>
+      <div class="chart-container"><h3>Recent Inventory Adjustments</h3>
+        <table class="data-table" id="table-adjustments"></table>
+      </div>
+    </section>
+    <section class="table-section">
+      <h3>Return Detail Log</h3>
+      <table class="data-table" id="table-returns"></table>
+    </section>
+  </div>
+
+  <footer class="dashboard-footer">Built from RVO Health / Rally Health kit fulfillment reports &middot; generated <span id="gen-time"></span></footer>
+</div>
+
+<script>
+const DATA = {"generated_at": "2026-08-26T17:03:40.678333+00:00", "as_of": {"inventory": "2026-08-23", "shipments": "2026-08-25", "returns": "2026-08-09", "open_orders": "2026-08-24", "orders_triggered": "2026-08-12"}, "kpis": {"total_on_hand": 17563, "total_available": 17520, "total_backorder": 0, "total_on_hold": 0, "sku_count_active": 8, "sku_count_total": 40, "shipped_total_period": 13923, "shipped_lines_period": 13559, "shipped_last7": 793, "last_ship_day": "2026-08-25", "returns_count": 2, "returns_qty": 2, "open_order_backlog_qty": 176, "open_order_backlog_lines": 176, "orders_triggered_mtd": 1741, "orders_triggered_last_day_count": 64}, "inventory": [{"sku": 8259, "stock_number": "RA-FIT-KIT25", "description": "REAL APPEAL FITNESS KIT", "available": 11585, "backorder": 0, "on_hold": 0, "on_hand": 11628}, {"sku": 2326, "stock_number": "RA-RARX1-KIT", "description": "RARx Fit Kit", "available": 5232, "backorder": 0, "on_hold": 0, "on_hand": 5232}, {"sku": 8861, "stock_number": "RA-BODYSCALE-WELLOS", "description": "RA BODY SCALE WELLOS", "available": 300, "backorder": 0, "on_hold": 0, "on_hand": 300}, {"sku": 2309, "stock_number": "FSCALE-9331", "description": "REAL APPEAL FOOD SCALE", "available": 173, "backorder": 0, "on_hold": 0, "on_hand": 173}, {"sku": 2316, "stock_number": "RA-CPS-PLAT", "description": "PORTION PLATE", "available": 122, "backorder": 0, "on_hold": 0, "on_hand": 122}, {"sku": 2327, "stock_number": "RA-TAPE", "description": "Tape Measure", "available": 48, "backorder": 0, "on_hold": 0, "on_hand": 48}, {"sku": 2328, "stock_number": "RA-RARX-SCALE", "description": "Smart Scale", "available": 45, "backorder": 0, "on_hold": 0, "on_hand": 45}, {"sku": 2321, "stock_number": "RA-BODY-SCAL", "description": "BODY SCALE", "available": 15, "backorder": 0, "on_hold": 0, "on_hand": 15}, {"sku": 2308, "stock_number": "16X6X6", "description": "16X6X6 - BLENDER SHIPPER BOX - FLAT", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2310, "stock_number": "RA-BLEN-CUP-OBS", "description": "REPLACEMENT BLENDER CUP", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2311, "stock_number": "RA-BLEN-D", "description": "PERSONAL BLENDER - DAMAGED", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2312, "stock_number": "RA-BLEN-LID", "description": "REPLACEMENT BLENDER LID", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2313, "stock_number": "RA-BLEN-R", "description": "BLENDER-RETURN-NO SHIPPER BOX", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2314, "stock_number": "RA-CPS-BAND", "description": "RESISTANCE BANDS", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2315, "stock_number": "RA-CPS-FOOD", "description": "ELECTRONIC FOOD SCALE", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2317, "stock_number": "RA-CPS-SCAL", "description": "ELEC BODY WEIGHT SCALE(NW)", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2318, "stock_number": "OBS RA-EN-DVD6", "description": "DVD WALLET W/ 6 DVD 5 FORMAT", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2319, "stock_number": "RAFITKIT22-R-OBS", "description": "REAL APPEAL FITNESS KIT-REBOX", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2320, "stock_number": "RA-XD-BLEN", "description": "RA PERSONAL BLENDER W/SHPR BOX", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2322, "stock_number": "RA-FIT-KIT23", "description": "REAL APPEAL FITNESS KIT", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2323, "stock_number": "RA-BLENDER", "description": "BLENDER", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2324, "stock_number": "RA-FIT-KIT23-R", "description": "REAL APPEAL FITNESS KIT-REPACK", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2325, "stock_number": "RA-FIT-KIT23MB-OBS", "description": "REAL APPEAL FITNESS KIT REAL APPEAL LOGO ONLY", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2329, "stock_number": "OBS-RA-EN-DVD601", "description": "DVD 1: REAL CARDIO/STRENGTH 1 (OBS)", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2330, "stock_number": "OBS-RA-EN-DVD602", "description": "DVD 2: REAL CARDIO/STRENGTH 2", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2331, "stock_number": "OBS-RA-EN-DVD603", "description": "DVD 3: REAL CARDIO/STRENGTH 3", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2332, "stock_number": "OBS-RA-EN-DVD604", "description": "DVD 4: REAL CARDIO/STRENGTH 4", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2333, "stock_number": "OBS-RA-EN-DVD605", "description": "DVD 5: REAL CARDIO/STRENGTH 5", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2334, "stock_number": "OBS-RA-EN-DVD606", "description": "DVD 6:REAL ABS 1/2, FLEX 1/2", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2335, "stock_number": "OBS RA-FIT-KIT22", "description": "REAL APPEAL FITNESS KIT", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2336, "stock_number": "OBS RA-KIT-DPP", "description": "DIABETES PREVENTION PROGRAM", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2337, "stock_number": "OBS RA-KIT-DPP-R", "description": "DIABETES PREVENTION PROAM-REBX", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2338, "stock_number": "OBS RA-V3-FG1", "description": "68 PAGE FITNESS GUIDE", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2339, "stock_number": "OBS RA-V3-NG1", "description": "200 PAGE NUTRITION GUIDE", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2340, "stock_number": "OBS RA-V3-VL1SG1", "description": "150 PAGE GUIDE #1 (7X10; 100)", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2341, "stock_number": "OBS RA-V3-VL2SG1", "description": "134 PAGE GUIDE #2 (7X10; 100)", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 2342, "stock_number": "OBS RALLY-RA-KIT", "description": "DVD FITNESS KIT W/BLENDER", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 6001, "stock_number": "RA-FIT-KIT23MB-R", "description": "REAL APPEAL FITNESS KIT REAL APPEAL LOGO ONLY - REBOX", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 8408, "stock_number": "RA-FSCALE BOX", "description": "RA-FSCALE BOX", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}, {"sku": 8854, "stock_number": "WC-BODY-SCALE", "description": "BODY SCALE", "available": 0, "backorder": 0, "on_hold": 0, "on_hand": 0}], "inventory_trend": [{"date": "2026-08-07", "sku": 2308, "stock_number": "16X6X6", "description": "16X6X6 - BLENDER SHIPPER BOX - FLAT", "on_hand": 0}, {"date": "2026-08-07", "sku": 2309, "stock_number": "FSCALE-9331", "description": "REAL APPEAL FOOD SCALE", "on_hand": 174}, {"date": "2026-08-07", "sku": 2323, "stock_number": "RA-BLENDER", "description": "BLENDER", "on_hand": 0}, {"date": "2026-08-07", "sku": 2321, "stock_number": "RA-BODY-SCAL", "description": "BODY SCALE", "on_hand": 18}, {"date": "2026-08-07", "sku": 8861, "stock_number": "RA-BODYSCALE-WELLOS", "description": "RA BODY SCALE WELLOS", "on_hand": 300}, {"date": "2026-08-07", "sku": 2314, "stock_number": "RA-CPS-BAND", "description": "RESISTANCE BANDS", "on_hand": 0}, {"date": "2026-08-07", "sku": 2316, "stock_number": "RA-CPS-PLAT", "description": "PORTION PLATE", "on_hand": 122}, {"date": "2026-08-07", "sku": 2317, "stock_number": "RA-CPS-SCAL", "description": "ELEC BODY WEIGHT SCALE(NW)", "on_hand": 0}, {"date": "2026-08-07", "sku": 8259, "stock_number": "RA-FIT-KIT25", "description": "REAL APPEAL FITNESS KIT", "on_hand": 13444}, {"date": "2026-08-07", "sku": 8408, "stock_number": "RA-FSCALE BOX", "description": "RA-FSCALE BOX", "on_hand": 0}, {"date": "2026-08-07", "sku": 2328, "stock_number": "RA-RARX-SCALE", "description": "Smart Scale", "on_hand": 45}, {"date": "2026-08-07", "sku": 2326, "stock_number": "RA-RARX1-KIT", "description": "RARx Fit Kit", "on_hand": 5234}, {"date": "2026-08-07", "sku": 2327, "stock_number": "RA-TAPE", "description": "Tape Measure", "on_hand": 48}, {"date": "2026-08-07", "sku": 2320, "stock_number": "RA-XD-BLEN", "description": "RA PERSONAL BLENDER W/SHPR BOX", "on_hand": 0}, {"date": "2026-08-07", "sku": 8854, "stock_number": "WC-BODY-SCALE", "description": "BODY SCALE", "on_hand": 0}, {"date": "2026-08-05", "sku": 2316, "stock_number": "RA-CPS-PLAT", "description": "PORTION PLATE", "on_hand": 122}, {"date": "2026-08-05", "sku": 8854, "stock_number": "WC-BODY-SCALE", "description": "BODY SCALE", "on_hand": 0}, {"date": "2026-08-05", "sku": 2328, "stock_number": "RA-RARX-SCALE", "description": "Smart Scale", "on_hand": 45}, {"date": "2026-08-05", "sku": 8408, "stock_number": "RA-FSCALE BOX", "description": "RA-FSCALE BOX", "on_hand": 0}, {"date": "2026-08-05", "sku": 8259, "stock_number": "RA-FIT-KIT25", "description": "REAL APPEAL FITNESS KIT", "on_hand": 14190}, {"date": "2026-08-05", "sku": 2308, "stock_number": "16X6X6", "description": "16X6X6 - BLENDER SHIPPER BOX - FLAT", "on_hand": 0}, {"date": "2026-08-05", "sku": 2320, "stock_number": "RA-XD-BLEN", "description": "RA PERSONAL BLENDER W/SHPR BOX", "on_hand": 0}, {"date": "2026-08-05", "sku": 2314, "stock_number": "RA-CPS-BAND", "description": "RESISTANCE BANDS", "on_hand": 0}, {"date": "2026-08-05", "sku": 2317, "stock_number": "RA-CPS-SCAL", "description": "ELEC BODY WEIGHT SCALE(NW)", "on_hand": 0}, {"date": "2026-08-05", "sku": 2326, "stock_number": "RA-RARX1-KIT", "description": "RARx Fit Kit", "on_hand": 5234}, {"date": "2026-08-05", "sku": 8861, "stock_number": "RA-BODYSCALE-WELLOS", "description": "RA BODY SCALE WELLOS", "on_hand": 300}, {"date": "2026-08-05", "sku": 2323, "stock_number": "RA-BLENDER", "description": "BLENDER", "on_hand": 0}, {"date": "2026-08-05", "sku": 2309, "stock_number": "FSCALE-9331", "description": "REAL APPEAL FOOD SCALE", "on_hand": 174}, {"date": "2026-08-05", "sku": 2321, "stock_number": "RA-BODY-SCAL", "description": "BODY SCALE", "on_hand": 18}, {"date": "2026-08-05", "sku": 2327, "stock_number": "RA-TAPE", "description": "Tape Measure", "on_hand": 48}], "inventory_trend_daily_total": [{"date": "2026-08-05", "on_hand": 20131}, {"date": "2026-08-07", "on_hand": 19385}], "shipments_daily": [{"date": "2026-06-01", "units": 79, "lines": 79}, {"date": "2026-06-02", "units": 488, "lines": 488}, {"date": "2026-06-03", "units": 233, "lines": 233}, {"date": "2026-06-04", "units": 286, "lines": 286}, {"date": "2026-06-05", "units": 105, "lines": 105}, {"date": "2026-06-08", "units": 412, "lines": 113}, {"date": "2026-06-09", "units": 500, "lines": 500}, {"date": "2026-06-10", "units": 399, "lines": 399}, {"date": "2026-06-11", "units": 359, "lines": 359}, {"date": "2026-06-12", "units": 207, "lines": 207}, {"date": "2026-06-15", "units": 114, "lines": 114}, {"date": "2026-06-16", "units": 352, "lines": 352}, {"date": "2026-06-17", "units": 239, "lines": 239}, {"date": "2026-06-18", "units": 388, "lines": 388}, {"date": "2026-06-19", "units": 74, "lines": 74}, {"date": "2026-06-22", "units": 28, "lines": 28}, {"date": "2026-06-23", "units": 239, "lines": 239}, {"date": "2026-06-24", "units": 105, "lines": 105}, {"date": "2026-06-25", "units": 404, "lines": 404}, {"date": "2026-06-26", "units": 186, "lines": 186}, {"date": "2026-06-29", "units": 127, "lines": 127}, {"date": "2026-06-30", "units": 180, "lines": 180}, {"date": "2026-07-01", "units": 418, "lines": 418}, {"date": "2026-07-02", "units": 277, "lines": 277}, {"date": "2026-07-03", "units": 80, "lines": 80}, {"date": "2026-07-07", "units": 174, "lines": 174}, {"date": "2026-07-08", "units": 307, "lines": 307}, {"date": "2026-07-09", "units": 211, "lines": 211}, {"date": "2026-07-10", "units": 114, "lines": 114}, {"date": "2026-07-13", "units": 81, "lines": 81}, {"date": "2026-07-14", "units": 143, "lines": 143}, {"date": "2026-07-15", "units": 129, "lines": 80}, {"date": "2026-07-16", "units": 366, "lines": 366}, {"date": "2026-07-17", "units": 240, "lines": 240}, {"date": "2026-07-20", "units": 60, "lines": 60}, {"date": "2026-07-21", "units": 238, "lines": 238}, {"date": "2026-07-22", "units": 398, "lines": 398}, {"date": "2026-07-23", "units": 292, "lines": 292}, {"date": "2026-07-24", "units": 251, "lines": 251}, {"date": "2026-07-28", "units": 329, "lines": 328}, {"date": "2026-07-29", "units": 265, "lines": 265}, {"date": "2026-07-30", "units": 236, "lines": 236}, {"date": "2026-07-31", "units": 484, "lines": 484}, {"date": "2026-08-06", "units": 289, "lines": 289}, {"date": "2026-08-07", "units": 385, "lines": 385}, {"date": "2026-08-10", "units": 270, "lines": 270}, {"date": "2026-08-12", "units": 360, "lines": 360}, {"date": "2026-08-13", "units": 169, "lines": 169}, {"date": "2026-08-14", "units": 252, "lines": 247}, {"date": "2026-08-17", "units": 314, "lines": 310}, {"date": "2026-08-18", "units": 494, "lines": 494}, {"date": "2026-08-20", "units": 308, "lines": 308}, {"date": "2026-08-21", "units": 216, "lines": 215}, {"date": "2026-08-24", "units": 65, "lines": 65}, {"date": "2026-08-25", "units": 204, "lines": 199}], "shipments_by_sku": [{"sku": 8259, "description": "REAL APPEAL FITNESS KIT", "units": 13530, "lines": 13514}, {"sku": 2321, "description": "BODY SCALE", "units": 312, "lines": 13}, {"sku": 2316, "description": "PORTION PLATE", "units": 52, "lines": 3}, {"sku": 2326, "description": "RARx Fit Kit", "units": 18, "lines": 18}, {"sku": 2309, "description": "REAL APPEAL FOOD SCALE", "units": 11, "lines": 11}], "returns": [{"return_id": 302223, "date_received": "2026-08-09 16:41:34.127", "reason": "03 - Defective", "carrier": "UPS", "qty": 1, "stock_number": "RA-FIT-KIT25", "description": "REAL APPEAL FITNESS KIT", "disposition": "DEFECTIVE"}, {"return_id": 302224, "date_received": "2026-08-09 16:47:40.490", "reason": "19 – Undeliverable", "carrier": "UPS", "qty": 1, "stock_number": "RA-FIT-KIT25", "description": "REAL APPEAL FITNESS KIT", "disposition": "DEFECTIVE"}], "returns_by_reason": [{"reason": "03 - Defective", "count": 1}, {"reason": "19 – Undeliverable", "count": 1}], "adjustments": [{"date": "2026-08-17 09:41:51.397", "reason": "UNPULL", "from_qty": 0, "to_qty": 90, "adjustor": "miguel.meza"}, {"date": "2026-08-17 09:41:51.397", "reason": "UNPULL", "from_qty": 2, "to_qty": 63, "adjustor": "miguel.meza"}, {"date": "2026-08-20 12:40:40.110", "reason": "UNPULL", "from_qty": 15, "to_qty": 16, "adjustor": "enrique.montes"}, {"date": "2026-08-20 12:40:40.110", "reason": "UNPULL", "from_qty": 116, "to_qty": 360, "adjustor": "enrique.montes"}, {"date": "2026-08-17 09:41:51.397", "reason": "UNPULL", "from_qty": 0, "to_qty": 90, "adjustor": "miguel.meza"}, {"date": "2026-08-17 09:41:51.397", "reason": "UNPULL", "from_qty": 2, "to_qty": 63, "adjustor": "miguel.meza"}, {"date": "2026-08-12 09:58:03.177", "reason": "LOCHOLD", "from_qty": 75, "to_qty": 75, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-12 09:58:12.907", "reason": "LOCHOLD", "from_qty": 0, "to_qty": 0, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-12 09:58:12.967", "reason": "RF INV MOVE", "from_qty": 362, "to_qty": 437, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-12 09:58:13.140", "reason": "RF INV MOVE", "from_qty": 75, "to_qty": 0, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-12 09:58:13.610", "reason": "LOCUNHOLD", "from_qty": 437, "to_qty": 437, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-12 09:58:13.807", "reason": "LOCUNHOLD", "from_qty": 0, "to_qty": 0, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-13 16:04:15.687", "reason": "LOCHOLD", "from_qty": 45, "to_qty": 45, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-13 16:04:17.953", "reason": "LOCHOLD", "from_qty": 0, "to_qty": 0, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-13 16:04:17.973", "reason": "RF INV MOVE", "from_qty": 360, "to_qty": 405, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-13 16:04:18.137", "reason": "RF INV MOVE", "from_qty": 45, "to_qty": 0, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-13 16:04:18.430", "reason": "LOCUNHOLD", "from_qty": 405, "to_qty": 405, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-13 16:04:18.573", "reason": "LOCUNHOLD", "from_qty": 0, "to_qty": 0, "adjustor": "FERNANDO2.RAMOS"}, {"date": "2026-08-06 07:38:35.763", "reason": "Cycle Count", "from_qty": 58, "to_qty": 121, "adjustor": "christian.torres"}], "open_order_backlog": {"lines": 176, "qty": 176, "sku": "8259", "description": "REAL APPEAL FITNESS KIT"}, "open_order_lines": [{"order_id": 3223914, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:24:47.717", "status": "Committed", "qty": 1}, {"order_id": 3223941, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:49:59.460", "status": "Committed", "qty": 1}, {"order_id": 3223942, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:49:59.680", "status": "Committed", "qty": 1}, {"order_id": 3223943, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:00.063", "status": "Committed", "qty": 1}, {"order_id": 3223944, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:00.547", "status": "Committed", "qty": 1}, {"order_id": 3223945, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:00.917", "status": "Committed", "qty": 1}, {"order_id": 3223946, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:01.117", "status": "Committed", "qty": 1}, {"order_id": 3223947, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:01.317", "status": "Committed", "qty": 1}, {"order_id": 3223948, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:01.600", "status": "Committed", "qty": 1}, {"order_id": 3223949, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:01.790", "status": "Committed", "qty": 1}, {"order_id": 3223950, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:02.070", "status": "Committed", "qty": 1}, {"order_id": 3223951, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:02.250", "status": "Committed", "qty": 1}, {"order_id": 3223952, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:02.427", "status": "Committed", "qty": 1}, {"order_id": 3223953, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:02.603", "status": "Committed", "qty": 1}, {"order_id": 3223954, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:02.787", "status": "Committed", "qty": 1}, {"order_id": 3223955, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:02.977", "status": "Committed", "qty": 1}, {"order_id": 3223956, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:03.153", "status": "Committed", "qty": 1}, {"order_id": 3223957, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:03.330", "status": "Committed", "qty": 1}, {"order_id": 3223958, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:03.643", "status": "Committed", "qty": 1}, {"order_id": 3223959, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:03.810", "status": "Committed", "qty": 1}, {"order_id": 3223960, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:03.987", "status": "Committed", "qty": 1}, {"order_id": 3223961, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:04.170", "status": "Committed", "qty": 1}, {"order_id": 3223962, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:04.340", "status": "Committed", "qty": 1}, {"order_id": 3223963, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:04.530", "status": "Committed", "qty": 1}, {"order_id": 3223964, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:04.717", "status": "Committed", "qty": 1}, {"order_id": 3223965, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:04.910", "status": "Committed", "qty": 1}, {"order_id": 3223966, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:05.080", "status": "Committed", "qty": 1}, {"order_id": 3223967, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:05.263", "status": "Committed", "qty": 1}, {"order_id": 3223968, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:05.430", "status": "Committed", "qty": 1}, {"order_id": 3223969, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:05.603", "status": "Committed", "qty": 1}, {"order_id": 3223970, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:05.770", "status": "Committed", "qty": 1}, {"order_id": 3223971, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:06.153", "status": "Committed", "qty": 1}, {"order_id": 3223972, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:06.337", "status": "Committed", "qty": 1}, {"order_id": 3223973, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:06.513", "status": "Committed", "qty": 1}, {"order_id": 3223974, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:50:06.687", "status": "Committed", "qty": 1}, {"order_id": 3223989, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 07:55:11.497", "status": "Committed", "qty": 1}, {"order_id": 3224204, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 09:52:21.567", "status": "Committed", "qty": 1}, {"order_id": 3224205, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 09:52:21.973", "status": "Committed", "qty": 1}, {"order_id": 3224206, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 09:52:22.163", "status": "Committed", "qty": 1}, {"order_id": 3224207, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 09:52:22.387", "status": "Committed", "qty": 1}, {"order_id": 3224427, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 10:44:23.017", "status": "Committed", "qty": 1}, {"order_id": 3224624, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 11:45:48.307", "status": "Committed", "qty": 1}, {"order_id": 3224625, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 11:45:48.680", "status": "Committed", "qty": 1}, {"order_id": 3224626, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 11:45:48.910", "status": "Committed", "qty": 1}, {"order_id": 3224627, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 11:45:49.110", "status": "Committed", "qty": 1}, {"order_id": 3224628, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 11:45:49.293", "status": "Committed", "qty": 1}, {"order_id": 3224733, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:46.680", "status": "Committed", "qty": 1}, {"order_id": 3224734, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:46.903", "status": "Committed", "qty": 1}, {"order_id": 3224735, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:47.127", "status": "Committed", "qty": 1}, {"order_id": 3224736, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:47.300", "status": "Committed", "qty": 1}, {"order_id": 3224737, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:47.550", "status": "Committed", "qty": 1}, {"order_id": 3224738, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:47.747", "status": "Committed", "qty": 1}, {"order_id": 3224739, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:47.980", "status": "Committed", "qty": 1}, {"order_id": 3224740, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:48.197", "status": "Committed", "qty": 1}, {"order_id": 3224741, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:48.497", "status": "Committed", "qty": 1}, {"order_id": 3224742, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:48.667", "status": "Committed", "qty": 1}, {"order_id": 3224743, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:48.833", "status": "Committed", "qty": 1}, {"order_id": 3224744, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:49.030", "status": "Committed", "qty": 1}, {"order_id": 3224745, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:49.217", "status": "Committed", "qty": 1}, {"order_id": 3224746, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:49.393", "status": "Committed", "qty": 1}, {"order_id": 3224747, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:49.583", "status": "Committed", "qty": 1}, {"order_id": 3224748, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:49.757", "status": "Committed", "qty": 1}, {"order_id": 3224749, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:49.983", "status": "Committed", "qty": 1}, {"order_id": 3224750, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:50.170", "status": "Committed", "qty": 1}, {"order_id": 3224751, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:50.380", "status": "Committed", "qty": 1}, {"order_id": 3224752, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:50.650", "status": "Committed", "qty": 1}, {"order_id": 3224753, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:51.063", "status": "Committed", "qty": 1}, {"order_id": 3224754, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:51.277", "status": "Committed", "qty": 1}, {"order_id": 3224755, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:51.497", "status": "Committed", "qty": 1}, {"order_id": 3224756, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:51.723", "status": "Committed", "qty": 1}, {"order_id": 3224757, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:51.893", "status": "Committed", "qty": 1}, {"order_id": 3224758, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:52.067", "status": "Committed", "qty": 1}, {"order_id": 3224759, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:52.257", "status": "Committed", "qty": 1}, {"order_id": 3224760, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:52.440", "status": "Committed", "qty": 1}, {"order_id": 3224761, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:52.633", "status": "Committed", "qty": 1}, {"order_id": 3224762, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:52.843", "status": "Committed", "qty": 1}, {"order_id": 3224763, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:53.010", "status": "Committed", "qty": 1}, {"order_id": 3224764, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:53.190", "status": "Committed", "qty": 1}, {"order_id": 3224765, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:53.373", "status": "Committed", "qty": 1}, {"order_id": 3224766, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:53.543", "status": "Committed", "qty": 1}, {"order_id": 3224767, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:53.707", "status": "Committed", "qty": 1}, {"order_id": 3224768, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:53.907", "status": "Committed", "qty": 1}, {"order_id": 3224769, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:54.320", "status": "Committed", "qty": 1}, {"order_id": 3224770, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:54.563", "status": "Committed", "qty": 1}, {"order_id": 3224771, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:54.797", "status": "Committed", "qty": 1}, {"order_id": 3224772, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:55.027", "status": "Committed", "qty": 1}, {"order_id": 3224773, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:55.210", "status": "Committed", "qty": 1}, {"order_id": 3224774, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:55.423", "status": "Committed", "qty": 1}, {"order_id": 3224775, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:55.760", "status": "Committed", "qty": 1}, {"order_id": 3224776, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:55.943", "status": "Committed", "qty": 1}, {"order_id": 3224777, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:56.133", "status": "Committed", "qty": 1}, {"order_id": 3224778, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:56.350", "status": "Committed", "qty": 1}, {"order_id": 3224779, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:56.593", "status": "Committed", "qty": 1}, {"order_id": 3224780, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:56.847", "status": "Committed", "qty": 1}, {"order_id": 3224781, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:57.050", "status": "Committed", "qty": 1}, {"order_id": 3224782, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:57.267", "status": "Committed", "qty": 1}, {"order_id": 3224783, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:57.567", "status": "Committed", "qty": 1}, {"order_id": 3224784, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:57.863", "status": "Committed", "qty": 1}, {"order_id": 3224785, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:58.253", "status": "Committed", "qty": 1}, {"order_id": 3224786, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:58.600", "status": "Committed", "qty": 1}, {"order_id": 3224787, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:58.923", "status": "Committed", "qty": 1}, {"order_id": 3224788, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:59.110", "status": "Committed", "qty": 1}, {"order_id": 3224789, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:59.300", "status": "Committed", "qty": 1}, {"order_id": 3224790, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:59.540", "status": "Committed", "qty": 1}, {"order_id": 3224791, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:59.720", "status": "Committed", "qty": 1}, {"order_id": 3224792, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:41:59.897", "status": "Committed", "qty": 1}, {"order_id": 3224793, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:00.090", "status": "Committed", "qty": 1}, {"order_id": 3224794, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:00.273", "status": "Committed", "qty": 1}, {"order_id": 3224795, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:00.457", "status": "Committed", "qty": 1}, {"order_id": 3224796, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:00.630", "status": "Committed", "qty": 1}, {"order_id": 3224797, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:00.813", "status": "Committed", "qty": 1}, {"order_id": 3224798, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:01.007", "status": "Committed", "qty": 1}, {"order_id": 3224799, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:01.193", "status": "Committed", "qty": 1}, {"order_id": 3224800, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:01.387", "status": "Committed", "qty": 1}, {"order_id": 3224801, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:01.550", "status": "Committed", "qty": 1}, {"order_id": 3224802, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:01.740", "status": "Committed", "qty": 1}, {"order_id": 3224803, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:01.910", "status": "Committed", "qty": 1}, {"order_id": 3224804, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:02.087", "status": "Committed", "qty": 1}, {"order_id": 3224805, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:02.263", "status": "Committed", "qty": 1}, {"order_id": 3224806, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:02.457", "status": "Committed", "qty": 1}, {"order_id": 3224807, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:02.640", "status": "Committed", "qty": 1}, {"order_id": 3224808, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:02.830", "status": "Committed", "qty": 1}, {"order_id": 3224809, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:03.020", "status": "Committed", "qty": 1}, {"order_id": 3224810, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:03.213", "status": "Committed", "qty": 1}, {"order_id": 3224811, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:03.410", "status": "Committed", "qty": 1}, {"order_id": 3224812, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:03.620", "status": "Committed", "qty": 1}, {"order_id": 3224813, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:03.793", "status": "Committed", "qty": 1}, {"order_id": 3224814, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:03.980", "status": "Committed", "qty": 1}, {"order_id": 3224815, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:04.150", "status": "Committed", "qty": 1}, {"order_id": 3224816, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:04.320", "status": "Committed", "qty": 1}, {"order_id": 3224817, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:04.497", "status": "Committed", "qty": 1}, {"order_id": 3224818, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:04.670", "status": "Committed", "qty": 1}, {"order_id": 3224819, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 12:42:04.840", "status": "Committed", "qty": 1}, {"order_id": 3224903, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 13:43:07.073", "status": "Committed", "qty": 1}, {"order_id": 3224995, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:57.160", "status": "Committed", "qty": 1}, {"order_id": 3224996, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:57.347", "status": "Committed", "qty": 1}, {"order_id": 3224997, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:57.603", "status": "Committed", "qty": 1}, {"order_id": 3224998, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:57.800", "status": "Committed", "qty": 1}, {"order_id": 3224999, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:57.977", "status": "Committed", "qty": 1}, {"order_id": 3225000, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:58.197", "status": "Committed", "qty": 1}, {"order_id": 3225001, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:58.400", "status": "Committed", "qty": 1}, {"order_id": 3225002, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:58.630", "status": "Committed", "qty": 1}, {"order_id": 3225003, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:58.843", "status": "Committed", "qty": 1}, {"order_id": 3225004, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:59.023", "status": "Committed", "qty": 1}, {"order_id": 3225005, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:59.210", "status": "Committed", "qty": 1}, {"order_id": 3225006, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:59.407", "status": "Committed", "qty": 1}, {"order_id": 3225007, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:59.620", "status": "Committed", "qty": 1}, {"order_id": 3225008, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:43:59.830", "status": "Committed", "qty": 1}, {"order_id": 3225009, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:00.037", "status": "Committed", "qty": 1}, {"order_id": 3225010, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:00.220", "status": "Committed", "qty": 1}, {"order_id": 3225011, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:00.403", "status": "Committed", "qty": 1}, {"order_id": 3225012, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:00.607", "status": "Committed", "qty": 1}, {"order_id": 3225013, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:00.787", "status": "Committed", "qty": 1}, {"order_id": 3225014, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:00.963", "status": "Committed", "qty": 1}, {"order_id": 3225015, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:01.153", "status": "Committed", "qty": 1}, {"order_id": 3225016, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:01.350", "status": "Committed", "qty": 1}, {"order_id": 3225017, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:01.553", "status": "Committed", "qty": 1}, {"order_id": 3225018, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:01.760", "status": "Committed", "qty": 1}, {"order_id": 3225019, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:01.960", "status": "Committed", "qty": 1}, {"order_id": 3225020, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:02.170", "status": "Committed", "qty": 1}, {"order_id": 3225021, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:02.370", "status": "Committed", "qty": 1}, {"order_id": 3225022, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:02.593", "status": "Committed", "qty": 1}, {"order_id": 3225023, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:02.800", "status": "Committed", "qty": 1}, {"order_id": 3225024, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:03.030", "status": "Committed", "qty": 1}, {"order_id": 3225025, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 14:44:03.233", "status": "Committed", "qty": 1}, {"order_id": 3225207, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 16:45:21.243", "status": "Committed", "qty": 1}, {"order_id": 3225208, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 16:45:21.443", "status": "Committed", "qty": 1}, {"order_id": 3225209, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 16:45:21.657", "status": "Committed", "qty": 1}, {"order_id": 3225273, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:43.537", "status": "Committed", "qty": 1}, {"order_id": 3225274, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:43.733", "status": "Committed", "qty": 1}, {"order_id": 3225275, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:43.943", "status": "Committed", "qty": 1}, {"order_id": 3225276, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:44.143", "status": "Committed", "qty": 1}, {"order_id": 3225277, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:44.340", "status": "Committed", "qty": 1}, {"order_id": 3225278, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:44.533", "status": "Committed", "qty": 1}, {"order_id": 3225279, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:44.707", "status": "Committed", "qty": 1}, {"order_id": 3225280, "sku": 8259, "description": "REAL APPEAL FITNESS KIT", "order_date": "2026-08-24 17:45:44.907", "status": "Committed", "qty": 1}], "orders_triggered_daily": [{"date": "2026-08-03", "count": 279}, {"date": "2026-08-04", "count": 241}, {"date": "2026-08-05", "count": 209}, {"date": "2026-08-06", "count": 293}, {"date": "2026-08-07", "count": 262}, {"date": "2026-08-08", "count": 2}, {"date": "2026-08-09", "count": 1}, {"date": "2026-08-10", "count": 167}, {"date": "2026-08-11", "count": 223}, {"date": "2026-08-12", "count": 64}]};
+const COLORS = ['#3b6fd6','#e08a3c','#3fa373','#c4504e','#8172b3','#4aa0c9'];
+const STUCK_THRESHOLD_BIZ_DAYS = 2;
+
+function fmt(v){
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(1)+'M';
+  if (Math.abs(v) >= 1e3) return (v/1e3).toFixed(1)+'K';
+  return Math.round(v).toLocaleString();
+}
+
+function businessDaysBetween(startDate, endDate){
+  let cur = new Date(startDate); cur.setHours(0,0,0,0);
+  let end = new Date(endDate); end.setHours(0,0,0,0);
+  let count = 0;
+  while (cur < end){
+    cur.setDate(cur.getDate()+1);
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
+document.getElementById('gen-time').textContent = new Date(DATA.generated_at).toLocaleString();
+document.getElementById('asof-line').textContent =
+  `Inventory as of ${DATA.as_of.inventory} · Shipments through ${DATA.as_of.shipments} · Returns as of ${DATA.as_of.returns} · Open orders as of ${DATA.as_of.open_orders}`;
+document.querySelectorAll('.asof-inv').forEach(el => el.textContent = DATA.as_of.inventory);
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('pane-' + btn.dataset.pane).classList.add('active');
+  });
+});
+
+// ---- Stuck open-order computation ----
+const now = new Date();
+const openOrderLines = (DATA.open_order_lines || []).map(l => {
+  const daysStuck = businessDaysBetween(l.order_date, now);
+  return Object.assign({}, l, { days_stuck: daysStuck, stuck: daysStuck >= STUCK_THRESHOLD_BIZ_DAYS });
+});
+const stuckLines = openOrderLines.filter(l => l.stuck);
+const stuckUnits = stuckLines.reduce((s,l)=>s+(l.qty||0),0);
+
+document.getElementById('stuck-table-title').textContent =
+  stuckLines.length ? `${stuckLines.length} of ${openOrderLines.length} lines are stuck (2+ business days in Committed status)` : `${openOrderLines.length} lines currently open, none stuck past ${STUCK_THRESHOLD_BIZ_DAYS} business days`;
+
+const alertEl = document.getElementById('stuck-alert');
+if (stuckLines.length > 0){
+  alertEl.innerHTML = `
+    <div class="alert-banner bad">
+      <div>
+        <div class="alert-text">⚠ ${stuckLines.length} kit line${stuckLines.length===1?'':'s'} (${stuckUnits.toLocaleString()} units) stuck in Committed / Label Created status for ${STUCK_THRESHOLD_BIZ_DAYS}+ business days</div>
+        <div class="alert-sub">These aren't falling off the Open Order report as expected — likely candidates to reorder. Based on Order Date from the ${DATA.as_of.open_orders} Open Order Detail Report.</div>
+      </div>
+      <button class="alert-cta" onclick="document.querySelector('.tab-btn[data-pane=shipments]').click(); document.getElementById('table-open-orders').scrollIntoView({behavior:'smooth'});">Review &amp; reorder →</button>
+    </div>`;
+} else {
+  alertEl.innerHTML = `
+    <div class="alert-banner good">
+      <div>
+        <div class="alert-text">✓ No committed lines stuck past ${STUCK_THRESHOLD_BIZ_DAYS} business days</div>
+        <div class="alert-sub">${openOrderLines.length} open order line(s) currently tracked, all within normal processing time as of ${DATA.as_of.open_orders}.</div>
+      </div>
+    </div>`;
+}
+
+// KPI cards
+const k = DATA.kpis;
+const kpis = [
+  {label:'Total On Hand', value: fmt(k.total_on_hand), sub: `${k.sku_count_active} active SKUs of ${k.sku_count_total}`, cls:''},
+  {label:'Available to Ship', value: fmt(k.total_available), sub:'across all SKUs', cls:'good'},
+  {label:'Backorder Qty', value: fmt(k.total_backorder), sub:'units on backorder', cls: k.total_backorder>0?'bad':''},
+  {label:'Shipped, Last 7 Days', value: fmt(k.shipped_last7), sub:`through ${k.last_ship_day}`, cls:''},
+  {label:'Open Order Backlog', value: fmt(k.open_order_backlog_qty), sub:`${k.open_order_backlog_lines} committed lines`, cls: stuckLines.length>0 ? 'bad' : 'warn'},
+  {label:'Stuck Lines (2+ biz days)', value: fmt(stuckLines.length), sub:`${stuckUnits.toLocaleString()} units — reorder candidates`, cls: stuckLines.length>0?'bad':'good'},
+  {label:'Returns (period)', value: fmt(k.returns_qty), sub:`${k.returns_count} return records`, cls:''},
+  {label:'Orders Triggered (MTD)', value: fmt(k.orders_triggered_mtd), sub: DATA.as_of.orders_triggered ? `${fmt(k.orders_triggered_last_day_count)} on ${DATA.as_of.orders_triggered}` : 'No Staci order-trigger report yet', cls:''},
+];
+document.getElementById('kpi-row').innerHTML = kpis.map(c => `
+  <div class="kpi-card ${c.cls}">
+    <div class="kpi-label">${c.label}</div>
+    <div class="kpi-value">${c.value}</div>
+    <div class="kpi-sub">${c.sub}</div>
+  </div>`).join('');
+
+// ---- Charts ----
+const shipDaily = DATA.shipments_daily;
+const shipLabels = shipDaily.map(d => d.date);
+const shipUnits = shipDaily.map(d => d.units);
+const shipLines = shipDaily.map(d => d.lines);
+
+function lineChart(id, labels, datasets){
+  return new Chart(document.getElementById(id).getContext('2d'), {
+    type:'line',
+    data:{ labels, datasets: datasets.map((ds,i)=>({
+      label: ds.label, data: ds.data, borderColor: COLORS[i%COLORS.length],
+      backgroundColor: COLORS[i%COLORS.length]+'22', borderWidth:2, fill: !!ds.fill,
+      tension:.3, pointRadius:0, pointHoverRadius:5, yAxisID: ds.yAxisID || 'y'
+    }))},
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'top', labels:{usePointStyle:true}}},
+      scales:{ x:{ grid:{display:false}, ticks:{maxTicksLimit:12} }, y:{ beginAtZero:true, title:{display:true,text:datasets[0].label} },
+        y1: datasets.length>1 ? { beginAtZero:true, position:'right', grid:{display:false}, title:{display:true,text:datasets[1].label} } : undefined }
+    }
+  });
+}
+
+lineChart('chart-ship-daily', shipLabels, [{label:'Units Shipped', data:shipUnits, fill:true}]);
+lineChart('chart-ship-daily-2', shipLabels, [
+  {label:'Units Shipped', data:shipUnits, fill:true},
+  {label:'Order Lines', data:shipLines, yAxisID:'y1'}
+]);
+
+// ---- Orders triggered SFHC -> Staci ----
+const trig = DATA.orders_triggered_daily || [];
+const trigNoteEl = document.getElementById('orders-triggered-note');
+if (trig.length) {
+  trigNoteEl.textContent = `${k.orders_triggered_mtd.toLocaleString()} orders triggered month-to-date, through ${DATA.as_of.orders_triggered}. Source: "Daily orders to Staci" Salesforce export (Created Date = this month, all accounts).`;
+  lineChart('chart-orders-triggered', trig.map(d=>d.date), [{label:'Orders Triggered', data: trig.map(d=>d.count), fill:true}]);
+
+  const last7Dates = trig.map(d=>d.date).slice(-7);
+  const shipByDate = Object.fromEntries(shipDaily.map(d=>[d.date, d.units]));
+  const trigByDate = Object.fromEntries(trig.map(d=>[d.date, d.count]));
+  new Chart(document.getElementById('chart-triggered-vs-shipped').getContext('2d'), {
+    type:'bar',
+    data:{ labels: last7Dates, datasets:[
+      { label:'Orders Triggered', data: last7Dates.map(d=>trigByDate[d] ?? 0), backgroundColor: COLORS[0]+'CC', borderRadius:4 },
+      { label:'Units Shipped', data: last7Dates.map(d=>shipByDate[d] ?? 0), backgroundColor: COLORS[2]+'CC', borderRadius:4 },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top', labels:{usePointStyle:true}}}, scales:{y:{beginAtZero:true}} }
+  });
+} else {
+  trigNoteEl.textContent = 'No "Daily orders to Staci" report found in the folder yet.';
+}
+
+// Inventory top SKUs
+const invTop = [...DATA.inventory].sort((a,b)=>b.on_hand-a.on_hand).slice(0,10);
+new Chart(document.getElementById('chart-inv-top').getContext('2d'), {
+  type:'bar',
+  data:{ labels: invTop.map(d=>d.description.length>18?d.description.slice(0,18)+'…':d.description),
+    datasets:[{ data: invTop.map(d=>d.on_hand), backgroundColor: COLORS[0]+'CC', borderRadius:4 }] },
+  options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}} }
+});
+
+// Shipments by SKU (top 6, doughnut)
+const skuShip = DATA.shipments_by_sku.slice(0,6);
+new Chart(document.getElementById('chart-ship-sku').getContext('2d'), {
+  type:'doughnut',
+  data:{ labels: skuShip.map(d=>d.description), datasets:[{ data: skuShip.map(d=>d.units), backgroundColor: COLORS.map(c=>c+'CC'), borderColor:'#fff', borderWidth:2 }] },
+  options:{ responsive:true, maintainAspectRatio:false, cutout:'58%', plugins:{legend:{position:'right', labels:{usePointStyle:true,boxWidth:8,font:{size:11}}}} }
+});
+
+// Returns by reason (x2 canvases)
+const retReason = DATA.returns_by_reason;
+['chart-returns-reason','chart-returns-reason-2'].forEach(id => {
+  new Chart(document.getElementById(id).getContext('2d'), {
+    type:'doughnut',
+    data:{ labels: retReason.map(d=>d.reason), datasets:[{ data: retReason.map(d=>d.count), backgroundColor: COLORS.map(c=>c+'CC'), borderColor:'#fff', borderWidth:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'55%', plugins:{legend:{position:'right', labels:{usePointStyle:true,boxWidth:8,font:{size:11}}}} }
+  });
+});
+
+// Inventory trend (Aug5 vs Aug7) per SKU
+const trend = DATA.inventory_trend;
+const trendSkus = [...new Set(trend.map(d=>d.sku))];
+const trendDates = [...new Set(trend.map(d=>d.date))].sort();
+const trendTop = [...trendSkus].sort((a,b)=>{
+  const totalA = trend.filter(d=>d.sku===a).reduce((s,d)=>s+d.on_hand,0);
+  const totalB = trend.filter(d=>d.sku===b).reduce((s,d)=>s+d.on_hand,0);
+  return totalB-totalA;
+}).slice(0,6);
+new Chart(document.getElementById('chart-inv-trend').getContext('2d'), {
+  type:'line',
+  data:{ labels: trendDates, datasets: trendTop.map((sku,i)=>{
+      const desc = (trend.find(d=>d.sku===sku)||{}).description || sku;
+      return { label: desc, data: trendDates.map(dt => (trend.find(d=>d.sku===sku && d.date===dt)||{}).on_hand ?? null),
+        borderColor: COLORS[i%COLORS.length], backgroundColor: COLORS[i%COLORS.length]+'22', borderWidth:2, tension:.2, pointRadius:4 };
+  })},
+  options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{usePointStyle:true, font:{size:10}}}}, scales:{y:{beginAtZero:true}} }
+});
+
+// Available vs backorder vs on hold (aggregate)
+new Chart(document.getElementById('chart-inv-status').getContext('2d'), {
+  type:'bar',
+  data:{ labels:['Available','Backorder','On Hold'],
+    datasets:[{ data:[k.total_available, k.total_backorder, k.total_on_hold], backgroundColor:[COLORS[2]+'CC',COLORS[3]+'CC',COLORS[1]+'CC'], borderRadius:4 }] },
+  options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+});
+
+// Open order backlog chart
+const oo = DATA.open_order_backlog;
+document.getElementById('backlog-note').textContent = `${oo.qty} units of SKU ${oo.sku} (${oo.description}) committed and awaiting shipment as of ${DATA.as_of.open_orders}. ${stuckLines.length} line(s) are past the ${STUCK_THRESHOLD_BIZ_DAYS}-business-day threshold.`;
+new Chart(document.getElementById('chart-backlog').getContext('2d'), {
+  type:'bar',
+  data:{ labels:['On time','Stuck (2+ biz days)'], datasets:[{ label:'Committed Qty', data:[oo.qty - stuckUnits, stuckUnits], backgroundColor: [COLORS[1]+'CC', COLORS[3]+'CC'], borderRadius:4 }] },
+  options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}} }
+});
+
+// ---- Tables ----
+function sortableTable(elId, rows, columns, rowClassFn){
+  let sortCol = null, sortDir = 'desc';
+  const el = document.getElementById(elId);
+  function render(data){
+    let html = '<thead><tr>' + columns.map(c => {
+      const arrow = sortCol===c.field ? (sortDir==='asc'?' ▲':' ▼') : '';
+      return `<th data-field="${c.field}">${c.label}${arrow}</th>`;
+    }).join('') + '</tr></thead><tbody>' +
+    data.map(r => `<tr class="${rowClassFn ? rowClassFn(r) : ''}">` + columns.map(c => `<td>${c.render ? c.render(r) : (r[c.field] ?? '—')}</td>`).join('') + '</tr>').join('') +
+    '</tbody>';
+    el.innerHTML = html;
+    el.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+      const f = th.dataset.field;
+      sortDir = (sortCol===f && sortDir==='desc') ? 'asc' : 'desc';
+      sortCol = f;
+      const sorted = [...rows].sort((a,b)=>{
+        const av=a[f], bv=b[f];
+        const cmp = (typeof av === 'number') ? av-bv : String(av).localeCompare(String(bv));
+        return sortDir==='asc' ? cmp : -cmp;
+      });
+      render(sorted);
+    }));
+  }
+  render(rows);
+}
+
+sortableTable('table-inventory', DATA.inventory, [
+  {label:'SKU', field:'sku'},
+  {label:'Stock #', field:'stock_number'},
+  {label:'Description', field:'description'},
+  {label:'On Hand', field:'on_hand', render:r=>r.on_hand.toLocaleString()},
+  {label:'Available', field:'available', render:r=>r.available.toLocaleString()},
+  {label:'Backorder', field:'backorder', render:r=> r.backorder>0 ? `<span class="badge zero">${r.backorder}</span>` : r.backorder},
+  {label:'On Hold', field:'on_hold'},
+]);
+
+sortableTable('table-shipments', DATA.shipments_daily, [
+  {label:'Date', field:'date'},
+  {label:'Units Shipped', field:'units', render:r=>r.units.toLocaleString()},
+  {label:'Order Lines', field:'lines', render:r=>r.lines.toLocaleString()},
+]);
+
+sortableTable('table-open-orders', openOrderLines, [
+  {label:'Order ID', field:'order_id'},
+  {label:'SKU', field:'sku'},
+  {label:'Description', field:'description'},
+  {label:'Order Date', field:'order_date'},
+  {label:'Status', field:'status'},
+  {label:'Qty', field:'qty'},
+  {label:'Business Days Stuck', field:'days_stuck', render:r=> r.stuck ? `<span class="badge stuck">${r.days_stuck}d — REORDER</span>` : r.days_stuck},
+], r => r.stuck ? 'stuck' : '');
+
+sortableTable('table-returns', DATA.returns, [
+  {label:'Return ID', field:'return_id'},
+  {label:'Date Received', field:'date_received'},
+  {label:'Reason', field:'reason'},
+  {label:'Qty', field:'qty'},
+  {label:'Stock #', field:'stock_number'},
+  {label:'Description', field:'description'},
+  {label:'Disposition', field:'disposition'},
+]);
+
+sortableTable('table-adjustments', DATA.adjustments, [
+  {label:'Date', field:'date'},
+  {label:'Reason', field:'reason'},
+  {label:'From Qty', field:'from_qty'},
+  {label:'To Qty', field:'to_qty'},
+  {label:'Adjustor', field:'adjustor'},
+]);
+</script>
+</body>
+</html>
